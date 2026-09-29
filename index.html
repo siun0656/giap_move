@@ -1,0 +1,94 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>날씨 조절사</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#fdf6ff;font-family:sans-serif;text-align:center;padding:env(safe-area-inset-top,0) 4px env(safe-area-inset-bottom,0)}
+#hud{padding:4px;font-size:14px;line-height:1.5}.f1{color:#e08a00;font-weight:bold}.f2{color:#5b5bd6;font-weight:bold}
+button{font-size:16px;padding:6px 12px;margin:2px;border:0;border-radius:14px;background:#ffe3a3;cursor:pointer}button.sel{outline:3px solid #333}#bL{background:#b9c6ff}
+#wrap{position:relative;max-width:800px;margin:auto}canvas{width:100%;border-radius:16px;touch-action:none;display:block}
+#ov{position:absolute;inset:0;background:#fffc;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:16px;padding:16px;font-size:16px;line-height:1.6}#ov.h{display:none}</style></head><body>
+<div id="hud"><b id="st"></b> · 선택: <b id="tl"></b><br><span class="f1">👉 고기압(H) ➔ 하강 기류(공기가 눌림) ➔ 구름이 펼쳐져 맑음! ☀️</span><br><span class="f2">👉 저기압(L) ➔ 상승 기류(공기가 솟구침) ➔ 공기가 식어 구름과 비! 🌧️</span></div>
+<div><button id="bH">H</button><button id="bL">L</button><button id="bh">💡</button><button id="br">🔄</button><button id="bp">◀</button><button id="bn">▶</button></div>
+<div id="wrap"><canvas id="c" width="800" height="500"></canvas><div id="ov"></div></div>
+<script>
+const F1='👉 고기압(H) ➔ 하강 기류 ➔ 구름이 펼쳐져 맑음! ☀️',F2='👉 저기압(L) ➔ 상승 기류 ➔ 구름과 비! 🌧️';
+const cv=c,X=cv.getContext('2d'),GY=440,RD=120;
+const M=(x,y,ic,o)=>({k:'m',x,y,sx:x,sy:y,vx:0,vy:0,ic,g:.012,dr:.7,t:0,...o});
+const R=(x,y,w,h,l)=>({k:'r',x,y,w,h,l});
+const C=(x,y,ic,o)=>({k:'c',x,y,sy:y,ic,a:1,cr:110,need:1,sz:70,...o});
+const V=(x,y,ic,f)=>({k:'v',x,y,ic,p:0,f,t:0});
+const D=(x,y,ic)=>({k:'d',x,y,ic});
+const S=[
+{n:'상승 기류의 시작',H:0,L:1,d:'열기구 아래에 L을 놓아 산을 넘어라!',ls:'저기압 아래에서는 공기가 위로 솟구쳐(상승 기류) 열기구가 떠올라요.',hi:[['L',200,410]],e:()=>[M(90,427,'🎈',{goal:[700,200,90,240]}),R(330,340,80,100)]},
+{n:'하강 기류의 시작',H:1,L:0,d:'태양광 발전소를 가린 먹구름 위에 H를 놓아라!',ls:'고기압에서는 공기가 아래로 눌려(하강 기류) 구름이 사라지고 맑아져요.',hi:[['H',400,150]],e:()=>[C(400,150,'☁️'),D(400,410,'☀️🔋')]},
+{n:'비구름 만들기',H:0,L:1,d:'가뭄 든 밭의 수증기 아래에 L을 놓아라!',ls:'저기압의 상승 기류가 수증기를 끌어올리면 식어서 비구름이 되어 비가 와요.',hi:[['L',300,420]],e:()=>[V(300,425,'🌾')]},
+{n:'스키장 안개 제거',H:1,L:0,d:'짙은 안개 위에 H를 놓아 눌러라!',ls:'고기압의 하강 기류가 안개를 눌러 펼치면 맑은 날씨가 돼요.',hi:[['H',380,180]],e:()=>[C(380,180,'🌫️',{cr:130,sz:90}),D(380,410,'⛷️')]},
+{n:'종이비행기 띄우기',H:0,L:2,d:'L 2개로 비행기를 높이 띄워 과녁을 맞혀라!',ls:'상승 기류를 층층이 만나면 종이비행기가 더 높이 올라가요.',hi:[['L',150,410],['L',260,260]],e:()=>[M(80,427,'✈️',{g:0,dr:.9,goal:[680,100,110,120]})]},
+{n:'2단계 높이 조절',H:1,L:1,d:'L로 띄우고 H로 눌러 동굴에 골인!',ls:'저기압은 위로, 고기압은 아래로! 두 기류로 높이를 조절할 수 있어요.',hi:[['L',190,410],['H',430,250]],e:()=>[M(70,427,'🎈',{goal:[560,370,120,70]}),R(300,330,80,110),R(470,0,270,350)]},
+{n:'산불 진화',H:0,L:1,d:'불난 곳의 수증기 아래에 L을 놓아 비를 내려라!',ls:'상승 기류가 만든 비구름의 비가 산불을 꺼요.',hi:[['L',420,420]],e:()=>[V(420,420,'🔥',1)]},
+{n:'쌍둥이 농장',H:1,L:1,d:'왼쪽은 H로 맑게, 오른쪽은 L로 비를!',ls:'같은 날씨 도구도 놓는 곳에 따라 맑음과 비를 나눠 만들어요.',hi:[['H',180,150],['L',600,420]],e:()=>[C(180,150,'☁️'),D(180,410,'☀️🔋'),V(600,425,'🌾')]},
+{n:'민들레 씨앗 날리기',H:0,L:1,d:'L의 상승 기류로 씨앗을 건너편 언덕으로!',ls:'상승 기류는 가벼운 씨앗도 높이 띄워 멀리 보내요.',hi:[['L',200,410]],e:()=>[M(80,427,'🌼',{g:.008,dr:.9,goal:[640,300,160,80]}),M(110,427,'🌼',{g:.008,dr:.9,goal:[640,300,160,80]}),R(330,360,90,80),R(640,380,160,60)]},
+{n:'바람 터널',H:1,L:0,d:'H로 열기구를 눌러 낮은 통로를 통과!',ls:'고기압의 하강 기류가 열기구를 아래로 눌러 내려요.',hi:[['H',230,240]],e:()=>[M(60,200,'🎈',{g:0,dr:.5,goal:[730,250,60,190]}),R(300,0,400,300)]},
+{n:'먹구름 몬스터 격퇴',H:2,L:0,d:'H 2개를 몬스터 위에 놓아 분쇄!',ls:'강한 고기압 두 개가 하강 기류로 먹구름을 눌러 없애요.',hi:[['H',380,95],['H',420,95]],e:()=>[C(400,90,'😈',{cr:70,need:2,mon:1,sz:60}),D(400,415,'🏘️')]},
+{n:'우주선 착륙',H:1,L:0,d:'H로 탐사선을 눌러 착륙장에 내려라!',ls:'하강 기류가 물체를 부드럽게 아래로 눌러줘요.',hi:[['H',600,100]],e:()=>[M(580,40,'🛰️',{g:-.006,dr:0,land:1,goal:[540,410,140,30]}),D(610,425,'🛬')]},
+{n:'비구름 이동시키기',H:1,L:1,d:'H의 바람으로 비구름을 숲까지 밀어라!',ls:'고기압에서는 공기가 바깥으로 퍼져 나가 구름을 밀어내요.',hi:[['H',80,200]],e:()=>[M(160,200,'🌧️',{g:0,dr:0,rain:1,goal:[600,40,190,300]}),D(700,420,'🌲🌲🌲')]},
+{n:'가시 장애물 미로',H:1,L:2,d:'L·H를 번갈아 놓아 가시를 피해라!',ls:'상승·하강 기류를 번갈아 쓰면 높이를 자유롭게 바꿔요.',hi:[['L',140,400],['H',380,160],['L',500,400]],e:()=>[M(30,300,'✈️',{g:.03,dr:1.2,goal:[730,100,70,340]}),R(230,330,60,110,1),R(400,0,60,230,1),R(560,330,60,110,1)]},
+{n:'태양광 회복',H:3,L:0,d:'먹구름 3개를 H 3개로 동시에!',ls:'고기압 여러 개가 넓은 구름을 눌러 맑게 만들어요.',hi:[['H',200,150],['H',400,150],['H',600,150]],e:()=>[C(200,150,'☁️',{cr:60}),C(400,150,'☁️',{cr:60}),C(600,150,'☁️',{cr:60}),D(400,415,'☀️🔋☀️🔋')]},
+{n:'대형 가뭄 해소',H:0,L:3,d:'밭 3곳에 L을 하나씩 놓아 비구름 띠를!',ls:'여러 곳의 상승 기류가 모이면 큰 비구름 띠가 생겨요.',hi:[['L',150,420],['L',400,420],['L',650,420]],e:()=>[V(150,425,'🌾'),V(400,425,'🌾'),V(650,425,'🌾')]},
+{n:'열기구 정밀 고도 유지',H:1,L:1,d:'위험 구역 사이 중간 높이로 통과!',ls:'상승과 하강 기류의 균형으로 알맞은 높이를 유지해요.',hi:[['L',120,400],['H',400,200]],e:()=>[M(50,427,'🎈',{dr:.8,goal:[730,230,70,170]}),R(230,360,120,80,1),R(450,40,150,250,1)]},
+{n:'바람의 곡예',H:1,L:2,d:'L·H·L로 S자 기류 길을 만들어라!',ls:'기류를 이어 붙이면 물체를 원하는 길로 옮길 수 있어요.',hi:[['L',140,410],['H',320,180],['L',480,400]],e:()=>[M(50,427,'🎈',{goal:[690,180,110,260]}),R(200,330,80,110),R(360,0,80,260),R(520,330,80,110)]},
+{n:'폭풍우 차단',H:1,L:0,d:'거대 비구름 중심에 H를 정확히!',ls:'고기압을 정확히 놓으면 큰 폭풍 구름도 눌러 사라지게 해요.',hi:[['H',400,170]],e:()=>[C(400,170,'⛈️',{cr:45,sz:130}),D(400,415,'🏘️')]},
+{n:'최종 날씨 마스터',H:2,L:2,d:'농장·태양광·열기구 착륙 3가지 미션!',ls:'H와 L을 알맞게 조합하면 어떤 날씨도 만들 수 있어요!',hi:[['H',300,140],['L',120,420],['H',640,110]],e:()=>[C(300,140,'☁️'),D(300,410,'☀️🔋'),V(120,425,'🌾'),M(620,40,'🎈',{g:-.006,dr:0,land:1,goal:[560,410,120,30]}),D(620,425,'🛬')]}];
+let si=0,T=[],E=[],sel='L',hint=0,win=0,mx=-99,my=-99,A,fr=0,run=0,drops=[],ptc=[];
+for(let i=0;i<70;i++)ptc.push({x:Math.random()*800,y:Math.random()*430,s:Math.random()});
+const $=id=>document.getElementById(id),cnt=n=>T.filter(t=>t.t==n).length,rem=n=>S[si][n]-cnt(n);
+function beep(f,d,ty,v,f2){if(!A)return;const o=A.createOscillator(),g=A.createGain(),t=A.currentTime;o.type=ty||'sine';o.frequency.setValueAtTime(f,t);if(f2)o.frequency.linearRampToValueAtTime(f2,t+d);g.gain.setValueAtTime(v||.15,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g).connect(A.destination);o.start();o.stop(t+d)}
+function nz(d,fq,v){if(!A)return;const b=A.createBuffer(1,A.sampleRate*d,A.sampleRate),a=b.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=Math.random()*2-1;const s=A.createBufferSource(),f=A.createBiquadFilter(),g=A.createGain();s.buffer=b;f.type='bandpass';f.frequency.value=fq;g.gain.setValueAtTime(v,A.currentTime);g.gain.linearRampToValueAtTime(0,A.currentTime+d);s.connect(f).connect(g).connect(A.destination);s.start()}
+const sfx={click:()=>beep(660,.08),up:()=>{beep(200,.4,'sine',.15,600);nz(.4,700,.15)},down:()=>{beep(600,.4,'sine',.15,200);nz(.4,400,.15)},clear:()=>[523,659,784].map((f,i)=>setTimeout(()=>beep(f,.2,'triangle'),i*90)),rain:()=>nz(1,3500,.2),ok:()=>[523,659,784,1047].map((f,i)=>setTimeout(()=>beep(f,.25,'triangle',.2),i*120)),bad:()=>beep(200,.3,'square',.1,100)};
+function ov(h,b,f){const o=$('ov');o.className='';o.innerHTML=h+'<br><button id="ob">'+b+'</button>';$('ob').onclick=()=>{A=A||new AudioContext();sfx.click();o.className='h';run=1;f&&f()}}
+function load(i){si=(i+S.length)%S.length;T=[];E=S[si].e();hint=0;win=0;drops=[];run=0;sel=S[si].L?'L':'H';ui();const s=S[si];ov('<h2>Stage '+(si+1)+'/20</h2><h3>'+s.n+'</h3>🎯 '+s.d+'<br><small>H '+s.H+'개 · L '+s.L+'개 (놓은 도구를 누르면 회수)</small><br><span class="f1">'+F1+'</span><br><span class="f2">'+F2+'</span>','시작!')}
+function ui(){$('st').textContent='스테이지 '+(si+1)+'/20';$('tl').textContent=sel=='H'?'고기압 H 🟠':'저기압 L 🔵';$('bH').textContent='H ×'+rem('H');$('bL').textContent='L ×'+rem('L');$('bH').className=sel=='H'?'sel':'';$('bL').className=sel=='L'?'sel':''}
+$('bH').onclick=()=>{sel='H';ui()};$('bL').onclick=()=>{sel='L';ui()};$('bh').onclick=()=>{hint=200;sfx.click()};$('br').onclick=()=>{T=[];E=S[si].e();win=0;drops=[];ui();sfx.click()};$('bp').onclick=()=>load(si-1);$('bn').onclick=()=>load(si+1);
+cv.onpointermove=e=>{const r=cv.getBoundingClientRect();mx=(e.clientX-r.left)*800/r.width;my=(e.clientY-r.top)*500/r.height};
+cv.onpointerleave=()=>{mx=my=-99};
+cv.onpointerdown=e=>{A=A||new AudioContext();cv.onpointermove(e);if(!run)return;const i=T.findIndex(t=>Math.hypot(t.x-mx,t.y-my)<24);if(i>=0){T.splice(i,1);sfx.click()}else if(rem(sel)>0){T.push({t:sel,x:mx,y:my});sel=='H'?sfx.down():sfx.up()}ui()};
+function fld(x,y){let fx=0,fy=0;for(const t of T){const dx=x-t.x,dy=y-t.y,d=Math.hypot(dx,dy);if(d<RD){const f=1-d/RD;if(t.t=='H'){fy+=.16*f;fx+=Math.sign(dx)*.05*f}else{fy-=.16*f;fx-=Math.sign(dx)*.02*f}}}return[fx,fy]}
+const hit=(e,r)=>e.x+13>r.x&&e.x-13<r.x+r.w&&e.y+13>r.y&&e.y-13<r.y+r.h;
+function die(e){e.x=e.sx;e.y=e.sy;e.vx=e.vy=0;sfx.bad()}
+function step(){fr++;
+for(const p of ptc){const[fx,fy]=fld(p.x,p.y);p.x+=.3+p.s*.4+fx*18;p.y+=Math.sin(fr/40+p.s*9)*.15+fy*18;if(p.x>800)p.x=0;if(p.x<0)p.x=800;if(p.y<0)p.y=430;if(p.y>440)p.y=0}
+if(!run)return;const rs=E.filter(e=>e.k=='r');let all=1;
+for(const e of E){
+if(e.k=='m'){const[fx,fy]=fld(e.x,e.y),air=!e.gr&&!e.rain?1:0;e.vx+=fx+(air?(e.dr-e.vx)*.03:0);if(e.gr)e.vx*=.6;e.vy=Math.max(-2.5,Math.min(2.5,(e.vy+fy+e.g)*.95));e.vx*=.985;
+e.x+=e.vx;for(const r of rs)if(hit(e,r)){if(r.l){die(e);break}e.x-=e.vx;e.vx=0}
+e.y+=e.vy;for(const r of rs)if(hit(e,r)){if(r.l){die(e);break}e.y-=e.vy;e.vy=0}
+e.x=Math.max(13,Math.min(787,e.x));if(e.y<15){e.y=15;e.vy=0}
+if(e.rain){e.y=Math.max(60,Math.min(300,e.y));e.gr=0}else{e.gr=e.y>=GY-13;if(e.gr){e.y=GY-13;e.vy=0}}
+const g=e.goal,ins=e.x>g[0]&&e.x<g[0]+g[2]&&e.y>g[1]&&e.y<g[1]+g[3]&&(!e.land||e.gr);
+if(e.rain){if(ins)e.t++;e.ok=e.t>90;if(ins&&e.t==1)sfx.rain()}else e.ok=ins}
+else if(e.k=='c'){const n=T.filter(t=>t.t=='H'&&Math.hypot(t.x-e.x,t.y-e.y)<e.cr).length;if(!e.ok){if(n>=e.need){e.a-=.006;if(e.a<.12){e.ok=1;sfx.clear()}}else{e.a=Math.min(1,e.a+.003);if(e.mon){e.y+=.12;if(e.y>390){e.y=e.sy;e.a=1;sfx.bad()}}}}}
+else if(e.k=='v'){if(!e.ok){const n=T.filter(t=>t.t=='L'&&Math.hypot(t.x-e.x,t.y-e.y)<100).length;e.p=n?e.p+.006:Math.max(0,e.p-.002);if(e.p>=1){e.ok=1;sfx.rain()}}}
+if((e.k=='m'||e.k=='c'||e.k=='v')&&!e.ok)all=0;
+if(e.k=='v'&&e.ok||e.k=='m'&&e.rain&&e.t>0){const cx=e.x,cy=e.k=='v'?e.y-170:e.y;if(fr%2==0)drops.push({x:cx+Math.random()*80-40,y:cy+20})}}
+for(const d of drops)d.y+=5;drops=drops.filter(d=>d.y<GY);
+win=all?win+1:0;
+if(win>45){run=0;sfx.ok();const s=S[si];ov('<h1>성공! 🎉</h1><h3>'+s.n+'</h3>🔬 '+s.ls+'<br><span class="f1">'+F1+'</span><br><span class="f2">'+F2+'</span>',si<19?'다음 스테이지 ▶':'처음부터 다시 ▶',()=>load(si+1))}}
+function arrow(x1,y1,x2,y2){X.beginPath();X.moveTo(x1,y1);X.lineTo(x2,y2);X.stroke();const a=Math.atan2(y2-y1,x2-x1);X.beginPath();X.moveTo(x2,y2);X.lineTo(x2-9*Math.cos(a-.5),y2-9*Math.sin(a-.5));X.lineTo(x2-9*Math.cos(a+.5),y2-9*Math.sin(a+.5));X.fill()}
+function tool(t,al){X.globalAlpha=al;const g=X.createRadialGradient(t.x,t.y,4,t.x,t.y,24);g.addColorStop(0,t.t=='H'?'#fff3a0':'#d5d0ff');g.addColorStop(1,t.t=='H'?'#ff9d2e':'#5f6bff');X.fillStyle=g;X.beginPath();X.arc(t.x,t.y,22,0,7);X.fill();X.fillStyle='#fff';X.font='bold 22px sans-serif';X.textAlign='center';X.textBaseline='middle';X.fillText(t.t,t.x,t.y+1);X.globalAlpha=1}
+function draw(){X.clearRect(0,0,800,500);const g=X.createLinearGradient(0,0,0,500);g.addColorStop(0,'#bfe6ff');g.addColorStop(1,'#fff1d6');X.fillStyle=g;X.fillRect(0,0,800,500);
+X.fillStyle='#fff';for(const p of ptc){X.globalAlpha=.5;X.beginPath();X.arc(p.x,p.y,2+p.s*2,0,7);X.fill()}X.globalAlpha=1;
+X.fillStyle='#b5e6a2';X.fillRect(0,GY,800,60);X.textAlign='center';X.textBaseline='middle';
+for(const e of E){if(e.k=='r'){X.fillStyle=e.l?'#ff8a8a':'#d9b38c';X.fillRect(e.x,e.y,e.w,e.h);if(e.l){X.fillStyle='#fff';X.font='18px sans-serif';for(let y=e.y+12;y<e.y+e.h;y+=28)X.fillText('▲▲▲▲▲▲'.slice(0,Math.max(2,e.w/16|0)),e.x+e.w/2,y)}}
+if(e.k=='m'&&!e.rain){const q=e.goal;X.strokeStyle='#3bb56b';X.lineWidth=3;X.setLineDash([8,6]);X.strokeRect(q[0],q[1],q[2],q[3]);X.setLineDash([]);X.font='22px sans-serif';X.fillText(e.land?'':'🎯',q[0]+q[2]/2,q[1]+14)}
+if(e.k=='m'&&e.rain){const q=e.goal;X.fillStyle='#e8c98a55';X.fillRect(q[0],q[1],q[2],q[3]);X.font='16px sans-serif';X.fillStyle='#8a6a2b';X.fillText('🏜️ 건조한 숲: 여기서 비를!',q[0]+q[2]/2,q[1]+16)}}
+for(const e of E){X.font='36px sans-serif';X.textBaseline='middle';
+if(e.k=='d')X.fillText(e.ic,e.x,e.y);
+if(e.k=='m')X.fillText(e.ic,e.x,e.y);
+if(e.k=='v'){if(e.ok)X.fillText(e.f?'🌲':'🌱',e.x,e.y);else{X.fillText(e.ic,e.x,e.y);X.fillStyle='#fff9';X.beginPath();X.arc(e.x,e.y-40-e.p*30,14+e.p*20,0,7);X.fill();X.fillStyle='#333';X.fillRect(e.x-30,e.y+22,60,6);X.fillStyle='#4a90ff';X.fillRect(e.x-30,e.y+22,60*e.p,6)}if(e.ok){X.font='60px sans-serif';X.fillText('🌧️',e.x,e.y-170)}}
+if(e.k=='c'&&!e.ok){X.globalAlpha=Math.max(.15,e.a);X.font=(e.sz*(.6+.4*e.a))+'px sans-serif';X.fillText(e.ic,e.x,e.y);X.globalAlpha=1}
+if(e.k=='c'&&e.ok){X.fillText('☀️',e.x,e.y)}}
+X.strokeStyle='#4a90ff';X.lineWidth=2;for(const d of drops){X.beginPath();X.moveTo(d.x,d.y);X.lineTo(d.x-2,d.y+10);X.stroke()}
+for(const t of T){X.setLineDash([]);X.strokeStyle=t.t=='H'?'#ff9d2e66':'#5f6bff66';X.lineWidth=2;X.beginPath();X.arc(t.x,t.y,RD,0,7);X.stroke();tool(t,1)}
+if(mx>0&&run&&rem(sel)>0){const H=sel=='H',col=H?'#ff9d2e':'#5f6bff';X.strokeStyle=col;X.fillStyle=col;X.lineWidth=2.5;X.setLineDash([7,6]);X.beginPath();X.arc(mx,my,RD,0,7);X.stroke();
+for(let i=-2;i<=2;i++){const x=mx+i*38;if(H){arrow(x,my-80,x,my+30);arrow(x,my+30,x+i*22,my+70)}else{arrow(x,my+80,x,my-70)}}X.setLineDash([]);tool({t:sel,x:mx,y:my},.6)}
+if(hint>0){hint--;for(const h of S[si].hi){if(T.filter(t=>t.t==h[0]).length>=S[si].hi.filter(q=>q[0]==h[0]).length&&!1)continue;const r=26+6*Math.sin(fr/6);X.strokeStyle=h[0]=='H'?'#ff9d2e':'#5f6bff';X.lineWidth=4;X.globalAlpha=.6+.4*Math.sin(fr/6);X.beginPath();X.arc(h[1],h[2],r,0,7);X.stroke();X.font='bold 20px sans-serif';X.fillStyle=X.strokeStyle;X.fillText(h[0],h[1],h[2]);X.globalAlpha=1}}}
+function loop(){step();draw();requestAnimationFrame(loop)}
+load(0);loop();
+</script></body></html>
